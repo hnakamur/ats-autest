@@ -10,4 +10,6 @@ mkdir -p ${work_dir}
 jenkins_uid=1200
 chown ${jenkins_uid}:${jenkins_uid} ${work_dir}
 
-seq 0 $(($shardcnt-1)) | parallel "docker run -e SHARD={} -e SHARDCNT=${shardcnt}  -e LANG=C --mount type=bind,source=${work_dir},target=/work --rm fedora41autest 2>&1 | tee ${work_dir}/autest-{}-of-${shardcnt}.log"
+seq 0 $(($shardcnt-1)) | parallel --results ${work_dir}/log_{} "docker run -e SHARD={} -e SHARDCNT=${shardcnt}  -e LANG=C --mount type=bind,source=${work_dir},target=/work --rm fedora41autest"
+
+echo work_dir=${work_dir}
