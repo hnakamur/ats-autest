@@ -15,12 +15,14 @@ work_dir_datetime=$(date +%Y%m%dT%H%M%S)
 incus file push instance_scripts/jenkins/run_autest.sh ${build_instance}/home/jenkins/
 
 if [ ${shardcnt} -le 0 ]; then
-  if incus info ${single} 2>/dev/null >/dev/null; then
-    incus delete ${single} --force
+  if [ "${NO_RECREATE:-}" == "" ]; then
+    if incus info ${single} 2>/dev/null >/dev/null; then
+      incus delete ${single} --force
+    fi
+    incus copy ${build_instance} ${single} --ephemeral
+    incus start ${single}
+    incus exec ${single} -- cloud-init status --wait
   fi
-  incus copy ${build_instance} ${single} --ephemeral
-  incus start ${single}
-  incus exec ${single} -- cloud-init status --wait
 
   work_dir=work-${work_dir_datetime}-single
   mkdir -p ${work_dir}

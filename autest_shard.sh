@@ -20,12 +20,14 @@ shard_instance=${shard_prefix}${shard}
 
 export INCUS_PROJECT=${project_name}
 
-if incus info ${shard_instance} 2>/dev/null >/dev/null; then
-  incus delete ${shard_instance} --force
+if [ "${NO_RECREATE:-}" == "" ]; then
+  if incus info ${shard_instance} 2>/dev/null >/dev/null; then
+    incus delete ${shard_instance} --force
+  fi
+  incus copy ${build_instance} ${shard_instance} --ephemeral
+  incus start ${shard_instance}
+  incus exec ${shard_instance} -- cloud-init status --wait
 fi
-incus copy ${build_instance} ${shard_instance} --ephemeral
-incus start ${shard_instance}
-incus exec ${shard_instance} -- cloud-init status --wait
 
 incus exec ${shard_instance} --env SHARD=${shard} --env SHARDCNT=${shardcnt} --user ${jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh "$@" 2>&1 | tee ${work_dir}/autest-${shard}-of-${shardcnt}.log
 
