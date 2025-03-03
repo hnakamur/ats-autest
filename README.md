@@ -1,11 +1,10 @@
 # ats-autest
 
-This repository contains Dockerfile and shell scripts to run Apache Traffic Server autest with sharding.
+This repository contains shell scripts to run Apache Traffic Server autest with sharding on Fedora 41 Incus containers.
 
 ## Set up
 
-Install Docker.
-You can use [setup-my-ubuntu-desktop/setup-docker.sh at main · hnakamur/setup-my-ubuntu-desktop](https://github.com/hnakamur/setup-my-ubuntu-desktop/blob/main/setup-docker.sh).
+Install Incus (See [First steps with Incus - Incus documentation](https://linuxcontainers.org/incus/docs/main/tutorial/first_steps/) or [Incusを使う最初のステップ - Incus ドキュメント](https://incus-ja.readthedocs.io/ja/latest/tutorial/first_steps/)).
 
 Install GNU Parallel.
 ```
@@ -20,7 +19,7 @@ git clone --depth 1 https://github.com/apache/trafficserver-ci
 
 Build the base image.
 ```
-./build-base.sh
+./build_base.sh
 ```
 
 Get the trafficserver repository.
@@ -31,7 +30,7 @@ git clone --depth 1 https://github.com/apache/trafficserver
 
 Build the image for running autest.
 ```
-./build.sh
+./build_ats.sh
 ```
 
 ## Run autest
@@ -39,12 +38,10 @@ Build the image for running autest.
 ### Run shared autest
 
 ```
-./shard.sh [shardcnt]
+SHARDCNT=4 ./autest.sh
 ```
 
-The default shardcnt is 4.
-
-The work directory like work-YYYYmmddTHHMMSS will be created.
+The work directory like work-YYYYmmddTHHMMSS-shard will be created.
 
 
 Run the following command in another terminal to tail log files.
@@ -55,7 +52,7 @@ Run the following command in another terminal to tail log files.
 ### Run filtered autest without sharding
 
 ```
-./no-shard.sh -f test_name1 test_name2 ...
+./autest.sh -f test_name1 test_name2 ...
 ```
 
-The work directory like work-YYYYmmddTHHMMSS will be created.
+The work directory like work-YYYYmmddTHHMMSS-single will be created.

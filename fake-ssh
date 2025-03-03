@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+ctn="${1}"
+shift
+
+exec incus exec --project ${PROJECT:-default} "${ctn}" -- "$@"

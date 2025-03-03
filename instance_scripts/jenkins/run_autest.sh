@@ -1,5 +1,6 @@
-#!/bin/bash -x
-set +e
+#!/bin/bash
+set -e
+set -x
 
 # This script is based on
 # https://github.com/apache/trafficserver-ci/blob/4dde2d75ca6e3847c1b5b771dad5b50c739c6507/jenkins/github/autest.pipeline
@@ -9,7 +10,9 @@ set +e
 export PATH=/opt/bin:${PATH}
 export PATH=/opt/go/bin:${PATH}
 
-export_dir="${WORKSPACE:-/work}"
+export_dir="${WORKSPACE:-$HOME/autest_work}"
+mkdir -p ${export_dir}
+
 sandbox_dir=${export_dir}/sandbox${SHARD:-}
 
 autest_args=""

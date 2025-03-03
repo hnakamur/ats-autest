@@ -1,0 +1,4 @@
+trafficserver-ci/
+trafficserver/
+work-*/
+*.log
