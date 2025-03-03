@@ -25,12 +25,10 @@ if [ ${shardcnt} -le 0 ]; then
   work_dir=work-${work_dir_datetime}-single
   mkdir -p ${work_dir}
   incus exec ${single} --user ${jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh "$@" 2>&1 | tee ${work_dir}/autest.log
+
+  env PROJECT=${project_name} rsync -e fake-ssh -rv ${single}:/home/jenkins/autest_work/sandbox ${work_dir}/
 else
   work_dir=work-${work_dir_datetime}-shard
   mkdir -p ${work_dir}
-  seq 0 $((${shardcnt}-1)) | parallel "if incus info ${shard_prefix}{} 2>/dev/null >/dev/null; then incus delete ${shard_prefix}{} --force; fi"
-  seq 0 $((${shardcnt}-1)) | parallel "incus copy ${build_instance} ${shard_prefix}{} --ephemeral"
-  seq 0 $((${shardcnt}-1)) | parallel "incus start ${shard_prefix}{}"
-  seq 0 $((${shardcnt}-1)) | parallel "incus exec ${shard_prefix}{} -- cloud-init status --wait"
-  seq 0 $((${shardcnt}-1)) | parallel "incus exec ${shard_prefix}{} --user ${jenkins_uid} --env SHARD={} --env SHARDCNT=${shardcnt} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh "$@" 2>&1 | tee ${work_dir}/autest-{}-of-${shardcnt}.log"
+  parallel ./autest_shard.sh {} ${work_dir} ::: $(seq 0 $((${shardcnt}-1)))
 fi

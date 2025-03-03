@@ -29,9 +29,9 @@ fi
 
 if [ ${SHARDCNT:-0} -le 0 ]; then
 	if ./autest.sh ${autest_args} "$@"; then
-		touch ${export_dir}/No_autest_failures
+		touch ${sandbox_dir}/No_autest_failures
 	else
-		touch ${export_dir}/Autest_failures
+		touch ${sandbox_dir}/Autest_failures
 		ls "${sandbox_dir}"
 	fi
 else
@@ -46,9 +46,9 @@ else
 	shardbeg=$((${shardsize} * ${SHARD}))
 	sliced=${testsall[@]:${shardbeg}:${shardsize}}
 	if ./autest.sh ${autest_args} -f ${sliced[@]}; then
-		touch ${export_dir}/No_autest_failures-${SHARD}
+		touch ${sandbox_dir}/No_autest_failures
 	else
-		touch ${export_dir}/Autest_failures-${SHARD}
+		touch ${sandbox_dir}/Autest_failures
 		ls "${sandbox_dir}"
 	fi
 fi
