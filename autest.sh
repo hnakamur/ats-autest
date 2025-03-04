@@ -15,7 +15,7 @@ work_dir_datetime=$(date +%Y%m%dT%H%M%S)
 incus file push instance_scripts/jenkins/run_autest.sh ${build_instance}/home/jenkins/
 
 if [ ${shardcnt} -le 0 ]; then
-  if [ "${NO_RECREATE:-}" == "" ]; then
+  if [ "${NO_RECREATE:-}" = "" ]; then
     if incus info ${single} 2>/dev/null >/dev/null; then
       incus delete ${single} --force
     fi

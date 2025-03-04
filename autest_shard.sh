@@ -20,7 +20,7 @@ shard_instance=${shard_prefix}${shard}
 
 export INCUS_PROJECT=${project_name}
 
-if [ "${NO_RECREATE:-}" == "" ]; then
+if [ "${NO_RECREATE:-}" = "" ]; then
   if incus info ${shard_instance} 2>/dev/null >/dev/null; then
     incus delete ${shard_instance} --force
   fi
