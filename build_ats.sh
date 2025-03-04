@@ -7,6 +7,9 @@ ats_built_snapshot_name=${ATS_BUILT_SNAPSHOT:-ats_built}
 
 export INCUS_PROJECT=${project_name}
 
+if incus snapshot show ${build_instance} ${ats_built_snapshot_name} 2>/dev/null >/dev/null; then
+  incus snapshot delete ${build_instance} ${ats_built_snapshot_name}
+fi
 incus snapshot restore ${build_instance} ${base_setup_snapshot_name}
 
 if [ "$(incus info ${build_instance} | grep ^Status)" != 'Status: RUNNING' ]; then
@@ -20,7 +23,4 @@ incus file push instance_scripts/jenkins/*.sh ${build_instance}/home/jenkins/
 
 incus exec ${build_instance} --user ${jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver -- sh -c '/home/jenkins/build_ats.sh 2>&1 | tee /home/jenkins/build_ats.log'
 
-if incus snapshot show ${build_instance} ${ats_built_snapshot_name} 2>/dev/null >/dev/null; then
-  incus snapshot delete ${build_instance} ${ats_built_snapshot_name}
-fi
 incus snapshot create ${build_instance} ${ats_built_snapshot_name}
