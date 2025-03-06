@@ -11,12 +11,6 @@ Install GNU Parallel.
 apt-get install parallel
 ```
 
-Get the `trafficserver-ci` repository.
-
-```
-git clone --depth 1 https://github.com/apache/trafficserver-ci
-```
-
 Build the base image.
 ```
 ./build_base.sh
