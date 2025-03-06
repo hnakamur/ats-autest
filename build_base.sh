@@ -21,7 +21,7 @@ fi
 # Set up base and dependent packages
 base_setup_snapshot_name=${BASE_SETUP_SNAPSHOT:-base_setup_done}
 if ! info snapshot show ${build_instance} ${base_setup_snapshot_name} 2>/dev/null >/dev/null; then
-  if [ $(incus info ${build_instance} | grep ^Status) = 'Status: RUNNING' ]; then
+  if [ "$(incus info ${build_instance} | grep ^Status)" = 'Status: RUNNING' ]; then
     incus start ${build_instance}
   fi
   incus file push instance_scripts/root/*.sh ${build_instance}/root/
