@@ -18,7 +18,10 @@ if [ "$(incus info ${build_instance} | grep ^Status)" != 'Status: RUNNING' ]; th
 fi
 
 env PROJECT=${project_name} rsync -e fake-ssh -rv ./trafficserver ${build_instance}:/home/jenkins/
-incus exec ${build_instance} -- chown -R jenkins: /home/jenkins/trafficserver
+incus exec ${build_instance} -- chown -R jenkins:jenkins /home/jenkins/trafficserver
+# Change permissions so that all files are readable
+# (default user umask may change and make these unreadable)
+incus exec ${build_instance} -- chmod -R o+r /home/jenkins/trafficserver
 incus file push instance_scripts/jenkins/*.sh ${build_instance}/home/jenkins/
 
 incus exec ${build_instance} --user ${jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver -- sh -c '/home/jenkins/build_ats.sh 2>&1 | tee /home/jenkins/build_ats.log'
