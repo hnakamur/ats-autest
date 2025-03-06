@@ -118,9 +118,9 @@ else
     OS="linux"
 fi
 
-wget https://go.dev/dl/go1.21.6.${OS}-${ARCH}.tar.gz
-rm -rf ${BASE}/go && tar -C ${BASE} -xf go1.21.6.${OS}-${ARCH}.tar.gz
-rm go1.21.6.${OS}-${ARCH}.tar.gz
+wget https://go.dev/dl/go1.23.0.${OS}-${ARCH}.tar.gz
+rm -rf ${BASE}/go && tar -C ${BASE} -xf go1.23.0.${OS}-${ARCH}.tar.gz
+rm go1.23.0.${OS}-${ARCH}.tar.gz
 chmod -R a+rX ${BASE}
 
 GO_BINARY_PATH=${BASE}/go/bin/go
