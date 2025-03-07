@@ -11,9 +11,9 @@ export PATH=/opt/bin:${PATH}
 export PATH=/opt/go/bin:${PATH}
 
 export_dir="${WORKSPACE:-$HOME/autest_work}"
-mkdir -p ${export_dir}
 
 sandbox_dir=${export_dir}/sandbox${SHARD:-}
+mkdir -p ${sandbox_dir}
 
 autest_args=""
 testsall=( $( find . -iname "*.test.py" | awk -F'/' '{print $NF}' | awk -F'.' '{print $1}' ) )
