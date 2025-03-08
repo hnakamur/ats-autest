@@ -1,0 +1,106 @@
+#!/usr/bin/python3
+import asyncio
+from datetime import datetime
+from itertools import chain
+from pathlib import Path
+import re
+import sys
+
+def remove_escape_sequences(text):
+    return re.sub(r'\x1b\[[0-9;]*[mK]', '', text)
+
+def get_test_result(plain_output):
+    result = None
+    for line in plain_output.splitlines():
+        match = re.match(r'^  (Unknown|Exception|Failed|Warning|Skipped|Passed): ([1-9][0-9]*)', line)
+        if match:
+            result = match.group(1)
+            # if we have failed test
+            if result == 'failed':
+                return result
+    return result
+
+async def worker(worker_id, ch, work_dir):
+    instance_name = f'shard{worker_id}'
+    jenkins_uid = 1200
+
+    failed_tests = []
+    while True:
+        test = await ch.get()
+        if test is None:
+            break
+        cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh -f {test}'
+        process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE)
+        colored_output_bytes, _ = await process.communicate()
+        colored_output = colored_output_bytes.decode('utf-8')
+        plain_output = remove_escape_sequences(colored_output)
+        result = get_test_result(plain_output)
+        print(f'worker {worker_id} {test}: {result}')
+        sys.stdout.flush()
+
+        log_file = work_dir.joinpath(result.lower(), f'{test}.log')
+        with open(log_file, 'wb') as f:
+            f.write(colored_output_bytes)
+
+        if result == 'Failed':
+            failed_tests.append(test)
+            project_name = 'autest'
+            cmd = f'env PROJECT={project_name} rsync -e fake-ssh -r --copy-links {instance_name}:/home/jenkins/autest_work/sandbox/ {work_dir}/sandbox/'
+            process = await asyncio.create_subprocess_shell(cmd, stdout=None, stderr=None)
+            await process.wait()
+
+        await asyncio.sleep(2)
+
+    return failed_tests
+
+def is_empty_dir(path):
+    return not any(path.iterdir())
+
+async def run_tests(work_dir, tests):
+    sub_dirs = ['unknown', 'exception', 'failed', 'warning', 'skipped', 'passed', 'sandbox']
+    for sub_dir in sub_dirs:
+        work_dir.joinpath(sub_dir).mkdir(parents=True, exist_ok=True)
+
+    ch = asyncio.Queue()
+    num_workers = 4
+    workers = [asyncio.create_task(worker(i, ch, work_dir)) for i in range(num_workers)]
+
+    for t in tests:
+        await ch.put(t)
+    for _ in range(num_workers):
+        await ch.put(None)
+
+    failed_tests = list(chain(*await asyncio.gather(*workers)))
+
+    for d in sub_dirs:
+        sub_dir = work_dir.joinpath(d)
+        if is_empty_dir(sub_dir):
+            sub_dir.rmdir()
+
+    return failed_tests
+
+async def main():
+    work_dir = Path('work-{}'.format(datetime.now().strftime('%Y%m%dT%H%M%S')))
+
+    tests = sorted(
+        Path(Path(f).stem).stem for f in Path('.').rglob('*.test.py')
+    )
+
+    max_retry_count = 3
+    i = 0
+    result_dir = work_dir
+    current_targets = tests
+    failed_tests = []
+    while i <= max_retry_count:
+        failed_tests = await run_tests(result_dir, current_targets)
+        if len(failed_tests) == 0:
+            break
+        i = i + 1
+        print(f'Start retry {i} ===')
+        result_dir = work_dir.joinpath(f'retry{i}')
+        current_targets = failed_tests
+    if len(failed_tests) > 0:
+        print(f'Failed tests after retries: {failed_tests}')
+        sys.exit(1)
+
+asyncio.run(main())
