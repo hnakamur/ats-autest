@@ -4,4 +4,4 @@ set -eu
 ctn="${1}"
 shift
 
-exec incus exec --project ${PROJECT:-default} "${ctn}" -- "$@"
+exec incus exec "${ctn}" -- "$@"
