@@ -10,6 +10,9 @@ import sys
 
 async def ensure_incus_project_exist(project_name):
     print(f'ensure_incus_project_exist start, project_name={project_name}')
+    if project_name == None:
+        project_name = os.environ['INCUS_PROJECT']
+    print(f'ensure_incus_project_exist start, project_name#2={project_name}')
     if project_name == 'default':
         return
 
@@ -21,6 +24,8 @@ async def ensure_incus_project_exist(project_name):
     """
     process = await asyncio.create_subprocess_shell(cmd)
     await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_incus_project_exist failed, project_name={project_name}')
 
 def env_with_incus_project(project_name):
     env = os.environ.copy()
@@ -29,6 +34,7 @@ def env_with_incus_project(project_name):
     return env
 
 async def ensure_incus_instance_exist(instance_name, timezone, env):
+    print(f'ensure_incus_instance_exist start, instance_name={instance_name}')
     cmd = f"""
     if ! incus info "{instance_name}" 2>/dev/null >/dev/null; then
         incus launch images:fedora/41/cloud {instance_name} -c user.user-data="#cloud-config
@@ -38,10 +44,13 @@ async def ensure_incus_instance_exist(instance_name, timezone, env):
     """
     process = await asyncio.create_subprocess_shell(cmd, env=env)
     await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_incus_instance_exist failed, instance_name={instance_name}')
 
 async def ensure_setup_done_on_instance(instance_name, base_setup_snapshot_name, env):
+    print(f'ensure_setup_done_on_instance start, instance_name={instance_name}')
     cmd = f"""
-    if ! info snapshot show {instance_name} {base_setup_snapshot_name} 2>/dev/null >/dev/null; then
+    if ! incus snapshot show {instance_name} {base_setup_snapshot_name} 2>/dev/null >/dev/null; then
         if [ "$(incus info {instance_name} | grep ^Status)" = 'Status: RUNNING' ]; then
             incus start {instance_name}
         fi
@@ -54,14 +63,36 @@ async def ensure_setup_done_on_instance(instance_name, base_setup_snapshot_name,
     """
     process = await asyncio.create_subprocess_shell(cmd, env=env)
     await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_setup_done_on_instance failed, instance_name={instance_name}')
 
-async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot, ats_built_snapshot, jenkins_uid, env):
+async def ensure_shards_deleted(shard_basename, env):
+    # note no need to re.escape(shard_basename) since instance name
+    # can only contain alphanumeric and hyphen characters.
+    cmd = f"""
+    incus list '^{shard_basename}[0-9]+$' -cn -f csv | xargs -r incus delete -f
+    """
+    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
+    await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_shards_deleted failed, shard_basname={shard_basename}')
+
+async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot, ats_built_snapshot, env):
+    print(f'ensure_restore_to_base_setup_done start, instance_name={instance_name}')
     cmd = f"""
     if incus snapshot show {instance_name} {ats_built_snapshot} 2>/dev/null >/dev/null; then
         incus snapshot delete {instance_name} {ats_built_snapshot}
     fi
     incus snapshot restore {instance_name} {base_setup_snapshot}
+    """
+    process = await asyncio.create_subprocess_shell(cmd, env=env)
+    await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_restore_to_base_setup_done failed, instance_name={instance_name}')
 
+async def ensure_ats_built(instance_name, ats_built_snapshot, jenkins_uid, env):
+    print(f'ensure_ats_built start, instance_name={instance_name}')
+    cmd = f"""
     if [ "$(incus info {instance_name} | grep ^Status)" != 'Status: RUNNING' ]; then
         incus start {instance_name}
         incus exec {instance_name} -- cloud-init status --wait
@@ -81,18 +112,28 @@ async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot, 
     """
     process = await asyncio.create_subprocess_shell(cmd, env=env)
     await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'ensure_ats_built failed, instance_name={instance_name}')
 
 def read_timezone_from_file():
     with open('/etc/timezone') as f:
         return f.read().rstrip('\n')
 
+def make_prefixed_build_intance_name(args):
+    return f'{args.instance_name_prefix}{args.build_instance_name}'
+
+def make_prefixed_shard_instance_basename(args):
+    return f'{args.instance_name_prefix}{args.shard_instance_basename}'
+
 async def build(args):
     project_name = args.project
-    build_instance_name = f'{args.instance_name_prefix}{args.build_instance_name}'
     timezone = args.timezone
     base_setup_snapshot = args.snapshot_base
     ats_built_snapshot = args.snapshot_ats
     jenkins_uid = args.jenkins_uid
+
+    build_instance_name = make_prefixed_build_intance_name(args)
+    shard_instance_basename = make_prefixed_shard_instance_basename(args)
 
     await ensure_incus_project_exist(project_name)
 
@@ -102,8 +143,9 @@ async def build(args):
     await ensure_incus_instance_exist(build_instance_name, timezone, env)
 
     await ensure_setup_done_on_instance(build_instance_name, base_setup_snapshot, env)
-    await ensure_restore_to_base_setup_done(build_instance_name, base_setup_snapshot, ats_built_snapshot, jenkins_uid, env)
-
+    await ensure_shards_deleted(shard_instance_basename, env)
+    await ensure_restore_to_base_setup_done(build_instance_name, base_setup_snapshot, ats_built_snapshot, env)
+    await ensure_ats_built(build_instance_name, ats_built_snapshot, jenkins_uid, env)
 
 async def make_shard(build_instance, shard_instance, env):
     cmd = f"""
@@ -117,19 +159,11 @@ async def make_shard(build_instance, shard_instance, env):
     """
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
     await process.communicate()
+    if process.returncode != 0:
+        raise RuntimeError(f'make_shard failed, build_instance={build_instance}, shard_instance={shard_instance}')
 
 async def make_shards(build_instance, shard_basename, shard_count, env):
     await asyncio.gather(*[make_shard(build_instance, f'{shard_basename}{i}', env) for i in range(shard_count)])
-
-async def delete_shard(shard_instance, env):
-    cmd = f"""
-    incus stop {shard_instance}
-    """
-    process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
-    await process.communicate()
-
-async def delete_shards(shard_basename, shard_count, env):
-    await asyncio.gather(*[delete_shard(f'{shard_basename}{i}', env) for i in range(shard_count)])
 
 def remove_escape_sequences(text):
     return re.sub(r'\x1b\[[0-9;]*[mK]', '', text)
@@ -238,13 +272,14 @@ async def run_tests_one_round(work_dir, num_workers, shard_instance_basename, te
 
 async def test(args):
     project_name = args.project
-    build_instance_name = f'{args.instance_name_prefix}{args.build_instance_name}'
-    shard_instance_basename = f'{args.instance_name_prefix}{args.shard_instance_basename}'
     num_workers = args.shards
     jenkins_uid = args.jenkins_uid
     skip_tests = args.skip
     tests_to_run = args.tests
     max_retry_count = args.max_retry_count
+
+    build_instance_name = make_prefixed_build_intance_name(args)
+    shard_instance_basename = make_prefixed_shard_instance_basename(args)
 
     if tests_to_run == None:
         tests_to_run = [Path(Path(f).stem).stem for f in Path('.').rglob('*.test.py')]
@@ -282,15 +317,33 @@ async def test(args):
         result_dir = work_dir.joinpath(f'retry{i}')
         current_targets = failed_tests
 
-    await delete_shards(shard_instance_basename, num_workers, env)
+    await ensure_shards_deleted(shard_basename, env)
 
     if len(failed_tests) > 0:
         print(f'Failed tests after retries: {failed_tests}')
         sys.exit(1)
 
-async def build_and_test(args):
-    await build(args)
-    await test(args)
+async def subcommand_build(args):
+    try:
+        await build(args)
+    except RuntimeError as e:
+        print(f'{e}', file=sys.stderr)
+        sys.exit(1)
+
+async def subcommand_test(args):
+    try:
+        await test(args)
+    except RuntimeError as e:
+        print(f'{e}', file=sys.stderr)
+        sys.exit(1)
+
+async def subcommand_build_and_test(args):
+    try:
+        await build(args)
+        await test(args)
+    except RuntimeError as e:
+        print(f'{e}', file=sys.stderr)
+        sys.exit(1)
 
 def add_common_arguments(parser):
     default_jenkins_uid = 1200
@@ -298,6 +351,7 @@ def add_common_arguments(parser):
     parser.add_argument('--project', help='incus project (or set INCUS_PROJECT environment variable before calling this command)')
     parser.add_argument('--instance-name-prefix', default='', help='instance name prefix')
     parser.add_argument('--build-instance-name', default='build', help='build instance name')
+    parser.add_argument('--shard-instance-basename', default='shard', help='shard instance basename')
     parser.add_argument('--jenkins-uid', default=default_jenkins_uid, help='uid for jenkins user')
 
 def add_build_arguments(parser):
@@ -311,7 +365,6 @@ def add_build_arguments(parser):
 def add_test_arguments(parser):
     default_shard_count = 16
 
-    parser.add_argument('--shard-instance-basename', default='shard', help='shard instance basename')
     parser.add_argument('--shards', default=default_shard_count, type=int, help='shard count')
     parser.add_argument('--max-retry-count', default=3, type=int, help='max retry count for round of tests')
     parser.add_argument('--tests', nargs='*', help='tests to run')
@@ -319,7 +372,7 @@ def add_test_arguments(parser):
 
 async def main():
     parser = argparse.ArgumentParser(
-                        prog='run_autest',
+                        prog='autest_on_incus',
                         description='Run autest in shards on Incus containers')
 
     subparsers = parser.add_subparsers(title='subcommands')
@@ -330,16 +383,16 @@ async def main():
 
     add_common_arguments(parser_build)
     add_build_arguments(parser_build)
-    parser_build.set_defaults(func=build)
+    parser_build.set_defaults(func=subcommand_build)
 
     add_common_arguments(parser_build_and_test)
     add_build_arguments(parser_build_and_test)
     add_test_arguments(parser_build_and_test)
-    parser_build_and_test.set_defaults(func=build_and_test)
+    parser_build_and_test.set_defaults(func=subcommand_build_and_test)
 
     add_common_arguments(parser_test)
     add_test_arguments(parser_test)
-    parser_test.set_defaults(func=test)
+    parser_test.set_defaults(func=subcommand_test)
 
     args = parser.parse_args()
     if hasattr(args, 'func'):
