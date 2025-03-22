@@ -66,16 +66,16 @@ async def ensure_setup_done_on_instance(instance_name, base_setup_snapshot_name,
     if process.returncode != 0:
         raise RuntimeError(f'ensure_setup_done_on_instance failed, instance_name={instance_name}')
 
-async def ensure_shards_deleted(shard_basename, env):
-    # note no need to re.escape(shard_basename) since instance name
+async def ensure_shards_deleted(shard_instance_basename, env):
+    # note no need to re.escape(shard_instance_basename) since instance name
     # can only contain alphanumeric and hyphen characters.
     cmd = f"""
-    incus list '^{shard_basename}[0-9]+$' -cn -f csv | xargs -r incus delete -f
+    incus list '^{shard_instance_basename}[0-9]+$' -cn -f csv | xargs -r incus delete -f
     """
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
     await process.communicate()
     if process.returncode != 0:
-        raise RuntimeError(f'ensure_shards_deleted failed, shard_basname={shard_basename}')
+        raise RuntimeError(f'ensure_shards_deleted failed, shard_basname={shard_instance_basename}')
 
 async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot, ats_built_snapshot, env):
     print(f'ensure_restore_to_base_setup_done start, instance_name={instance_name}')
@@ -162,8 +162,8 @@ async def make_shard(build_instance, shard_instance, env):
     if process.returncode != 0:
         raise RuntimeError(f'make_shard failed, build_instance={build_instance}, shard_instance={shard_instance}')
 
-async def make_shards(build_instance, shard_basename, shard_count, env):
-    await asyncio.gather(*[make_shard(build_instance, f'{shard_basename}{i}', env) for i in range(shard_count)])
+async def make_shards(build_instance, shard_instance_basename, shard_count, env):
+    await asyncio.gather(*[make_shard(build_instance, f'{shard_instance_basename}{i}', env) for i in range(shard_count)])
 
 def remove_escape_sequences(text):
     return re.sub(r'\x1b\[[0-9;]*[mK]', '', text)
@@ -317,7 +317,7 @@ async def test(args):
         result_dir = work_dir.joinpath(f'retry{i}')
         current_targets = failed_tests
 
-    await ensure_shards_deleted(shard_basename, env)
+    await ensure_shards_deleted(shard_instance_basename, env)
 
     if len(failed_tests) > 0:
         print(f'Failed tests after retries: {failed_tests}')
