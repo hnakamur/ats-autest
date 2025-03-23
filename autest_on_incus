@@ -197,7 +197,7 @@ async def enlarge_ipv4_local_port_range(instance_name, env):
     _, stderr = await process.communicate()
     return process, stderr
 
-async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, failed_test_queue, jenkins_uid, env):
+async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, failed_test_queue, jenkins_uid, test_clean_level, test_verbose, env):
     instance_name = f'{shard_instance_basename}{worker_id}'
 
     await enlarge_ipv4_local_port_range(instance_name, env)
@@ -209,9 +209,15 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, 
         sys.stdout.flush()
 
         log_path = work_dir.joinpath(f'{test}.log')
-        #cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --verbose --filters {test} 2>&1 > {log_path}'
-        #cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --filters {test} --clean none 2>&1 > {log_path}'
-        cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --filters {test} 2>&1 > {log_path}'
+        additional_args = ''
+        if test_clean_level == 'none':
+            additional_args = ' --clean none'
+        if test_verbose != None:
+            if len(test_verbose) == 0:
+                additional_args += ' --verbose'
+            else:
+                additional_args += f' --verbose {test_verbose.join(" ")}'
+        cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --filters {test}{additional_args} 2>&1 > {log_path}'
         process = await asyncio.create_subprocess_shell(cmd, env=env)
         await process.communicate()
 
@@ -228,11 +234,12 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, 
 
         os.rename(log_path, work_dir.joinpath(result.lower(), f'{test}.log'))
 
-        if result == 'Failed':
+        if result == 'Failed' or test_clean_level == 'none':
             cmd = f'rsync -e ./fake-ssh -r {instance_name}:/home/jenkins/autest_work/sandbox/ {work_dir}/sandbox/'
             process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE, env=env)
             await process.communicate()
 
+        if result == 'Failed':
             await failed_test_queue.put(test)
 
         test_queue.task_done()
@@ -244,14 +251,14 @@ def sort_tests(tests):
     # Move remap_acl to first since it takes a long time to run
     return sorted(tests, key=lambda x: (x if x != 'remap_acl' else ''))
 
-async def run_tests_one_round(work_dir, num_workers, shard_instance_basename, tests, jenkins_uid, env):
+async def run_tests_one_round(work_dir, num_workers, shard_instance_basename, tests, jenkins_uid, test_clean_level, test_verbose, env):
     sub_dirs = ['unknown', 'exception', 'failed', 'warning', 'skipped', 'passed', 'sandbox']
     for sub_dir in sub_dirs:
         work_dir.joinpath(sub_dir).mkdir(parents=True, exist_ok=True)
 
     test_queue = asyncio.Queue()
     failed_test_queue = asyncio.Queue()
-    tasks = [asyncio.create_task(test_worker(i, shard_instance_basename, test_queue, work_dir, failed_test_queue, jenkins_uid, env)) for i in range(num_workers)]
+    tasks = [asyncio.create_task(test_worker(i, shard_instance_basename, test_queue, work_dir, failed_test_queue, jenkins_uid, test_clean_level, test_verbose, env)) for i in range(num_workers)]
 
     for t in tests:
         await test_queue.put(t)
@@ -277,6 +284,8 @@ async def test(args):
     skip_tests = args.skip
     tests_to_run = args.tests
     max_retry_count = args.max_retry_count
+    test_clean_level = args.clean
+    test_verbose = args.verbose
 
     build_instance_name = make_prefixed_build_intance_name(args)
     shard_instance_basename = make_prefixed_shard_instance_basename(args)
@@ -308,7 +317,7 @@ async def test(args):
     failed_tests = []
     while i < max_retry_count:
         print(f'running round #{i + 1} of tests, count={len(current_targets)}')
-        failed_tests = await run_tests_one_round(result_dir, num_workers, shard_instance_basename, current_targets, jenkins_uid, env)
+        failed_tests = await run_tests_one_round(result_dir, num_workers, shard_instance_basename, current_targets, jenkins_uid, test_clean_level, test_verbose, env)
         print(f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}')
         if len(failed_tests) == 0:
             break
@@ -369,6 +378,20 @@ def add_test_arguments(parser):
     parser.add_argument('--max-retry-count', default=3, type=int, help='max retry count for round of tests')
     parser.add_argument('--tests', nargs='*', help='tests to run')
     parser.add_argument('--skip', nargs='*', help='tests to skip')
+
+    # copied from autest help
+    #  -C, --clean CLEAN     Level of cleaning for after a test is finished. all > exception > failed >
+    #                    warning > passed > skipped > unknown> none Defaults at passed
+    #
+    # We only accept 'passed' and 'none' for now.
+    parser.add_argument('--clean', default='passed', choices=['passed', 'none'], help='level of cleaning after a test is finished')
+
+    # copied from autest help
+    #  --verbose, -v [CATEGORY ...]
+    #                    Display all verbose messages or only messages of provided categories
+    #  --debug [CATEGORY ...]
+    #                    Display all debug messages or only messages of provided categories
+    parser.add_argument('--verbose', nargs='*', help='Display all verbose messages or only messages of provided categories')
 
 async def main():
     parser = argparse.ArgumentParser(
