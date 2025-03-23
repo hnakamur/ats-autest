@@ -11,9 +11,9 @@ import sys
 async def ensure_incus_project_exist(project_name):
     print(f'ensure_incus_project_exist start, project_name={project_name}')
     if project_name == None:
-        project_name = os.environ['INCUS_PROJECT']
+        project_name = os.environ.get('INCUS_PROJECT')
     print(f'ensure_incus_project_exist start, project_name#2={project_name}')
-    if project_name == 'default':
+    if project_name == None or project_name == 'default':
         return
 
     cmd = f"""
