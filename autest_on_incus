@@ -315,7 +315,7 @@ async def test(args):
     result_dir = work_dir
     current_targets = sort_tests(tests_to_run)
     failed_tests = []
-    while i < max_retry_count:
+    while i <= max_retry_count:
         print(f'=== running round #{i + 1} of tests, count={len(current_targets)} ===')
         failed_tests = await run_tests_one_round(result_dir, num_workers, shard_instance_basename, current_targets, jenkins_uid, test_clean_level, test_verbose, env)
         print(f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}')
