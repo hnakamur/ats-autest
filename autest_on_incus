@@ -371,9 +371,9 @@ def add_build_arguments(parser):
     parser.add_argument('--snapshot-ats', default=default_snapshot_ats, help='snapshot name for trafficserver build done')
 
 def add_test_arguments(parser):
-    default_shard_count = 16
+    default_shard_count = int(os.cpu_count() / 2)
 
-    parser.add_argument('--shards', default=default_shard_count, type=int, help='shard count')
+    parser.add_argument('--shards', default=default_shard_count, type=int, help=f'shard count (default: {default_shard_count})')
     parser.add_argument('--max-retry-count', default=3, type=int, help='max retry count for round of tests')
     parser.add_argument('--tests', nargs='*', help='tests to run')
     parser.add_argument('--skip', nargs='*', help='tests to skip')
