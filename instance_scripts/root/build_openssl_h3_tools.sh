@@ -23,7 +23,7 @@
 set -e
 
 # This is a slightly modified version of:
-# https://github.com/apache/trafficserver/blob/master/tools/build_openssl_h3_tools.sh
+# https://github.com/apache/trafficserver/blob/756c49ff52219e376bd60420e6081f64f8b5d3c7/tools/build_openssl_h3_tools.sh
 #
 # This present script been modified from the latter in the following ways:
 #
@@ -127,7 +127,7 @@ echo "Building quiche"
 QUICHE_BASE="${BASE:-/opt}/quiche"
 [ ! -d quiche ] && git clone https://github.com/cloudflare/quiche.git
 cd quiche
-git checkout 0.22.0
+git checkout 0.23.2
 
 PKG_CONFIG_PATH="$OPENSSL_LIB"/pkgconfig LD_LIBRARY_PATH="$OPENSSL_LIB" \
   cargo build -j4 --package quiche --release --features ffi,pkg-config-meta,qlog,openssl
