@@ -23,7 +23,7 @@
 set -e
 
 # This is a slightly modified version of:
-# https://github.com/apache/trafficserver/blob/master/tools/build_boringssl_h3_tools.sh
+# https://github.com/apache/trafficserver/blob/756c49ff52219e376bd60420e6081f64f8b5d3c7/tools/build_boringssl_h3_tools.sh
 #
 # This present script been modified from the latter in the following ways:
 #
@@ -118,16 +118,16 @@ else
     OS="linux"
 fi
 
-wget https://go.dev/dl/go1.23.0.${OS}-${ARCH}.tar.gz
-rm -rf ${BASE}/go && tar -C ${BASE} -xf go1.23.0.${OS}-${ARCH}.tar.gz
-rm go1.23.0.${OS}-${ARCH}.tar.gz
-chmod -R a+rX ${BASE}
+go_version=1.24.1
+wget https://go.dev/dl/go${go_version}.${OS}-${ARCH}.tar.gz
+rm -rf ${BASE}/go && tar -C ${BASE} -xf go${go_version}.${OS}-${ARCH}.tar.gz
+rm go${go_version}.${OS}-${ARCH}.tar.gz
 
 GO_BINARY_PATH=${BASE}/go/bin/go
 if [ ! -d boringssl ]; then
   git clone https://boringssl.googlesource.com/boringssl
   cd boringssl
-  git checkout a1843d660b47116207877614af53defa767be46a
+  git checkout 45b2464158379f48cec6e35a1ef503ddea1511a6
   cd ..
 fi
 cd boringssl
@@ -143,7 +143,7 @@ fi
 set -e
 
 # Note: -Wdangling-pointer=0
-# We may have some issues with latest GCC compilers, so disabling -Wdangling-pointer=
+#   We may have some issues with latest GCC compilers, so disabling -Wdangling-pointer=
 # Note: -UBORINGSSL_HAVE_LIBUNWIND
 #   Disable related libunwind test builds, there are some version number issues
 #   with this pkg in Ubuntu 20.04, so disable this to make sure it builds.
@@ -154,6 +154,7 @@ cmake \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_FLAGS='-Wno-error=ignored-attributes -UBORINGSSL_HAVE_LIBUNWIND' \
   -DCMAKE_C_FLAGS=${BSSL_C_FLAGS} \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DBUILD_SHARED_LIBS=1
 cmake \
   -B build-static \
@@ -161,7 +162,8 @@ cmake \
   -DCMAKE_INSTALL_PREFIX=${BASE}/boringssl \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_FLAGS='-Wno-error=ignored-attributes -UBORINGSSL_HAVE_LIBUNWIND' \
-  -DCMAKE_C_FLAGS=${BSSL_C_FLAGS} \
+  -DCMAKE_C_FLAGS="${BSSL_C_FLAGS}" \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DBUILD_SHARED_LIBS=0
 cmake --build build-shared -j ${num_threads}
 cmake --build build-static -j ${num_threads}
@@ -177,7 +179,7 @@ echo "Building quiche"
 QUICHE_BASE="${BASE:-/opt}/quiche"
 [ ! -d quiche ] && git clone  https://github.com/cloudflare/quiche.git
 cd quiche
-git checkout 0.22.0
+git checkout 0.23.2
 QUICHE_BSSL_PATH=${BORINGSSL_LIB_PATH} QUICHE_BSSL_LINK_KIND=dylib cargo build -j4 --package quiche --release --features ffi,pkg-config-meta,qlog
 mkdir -p ${QUICHE_BASE}/lib/pkgconfig
 mkdir -p ${QUICHE_BASE}/include
