@@ -35,11 +35,15 @@ def env_with_incus_project(project_name):
 
 async def ensure_incus_instance_exist(instance_name, timezone, env):
     print(f'ensure_incus_instance_exist start, instance_name={instance_name}')
+    # Note we need a workaround to start systemd-networkd service manually after launch.
+    # See https://discuss.linuxcontainers.org/t/network-is-unreachable-in-fedora-41-container-on-incus/23351
     cmd = f"""
-    if ! incus info "{instance_name}" 2>/dev/null >/dev/null; then
+    if ! incus info {instance_name} 2>/dev/null >/dev/null; then
         incus launch images:fedora/41/cloud {instance_name} -c user.user-data="#cloud-config
     timezone: {timezone}
     "
+        incus exec {instance_name} -- cloud-init status --wait
+        incus exec {instance_name} -- systemctl start systemd-networkd
     fi
     """
     process = await asyncio.create_subprocess_shell(cmd, env=env)
