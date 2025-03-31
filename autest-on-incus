@@ -44,6 +44,7 @@ async def ensure_incus_instance_exist(instance_name, timezone, env):
     "
         incus exec {instance_name} -- cloud-init status --wait
         incus exec {instance_name} -- systemctl start systemd-networkd
+        incus exec {instance_name} -- systemctl enable systemd-networkd
     fi
     """
     process = await asyncio.create_subprocess_shell(cmd, env=env)
