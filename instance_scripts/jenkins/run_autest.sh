@@ -13,6 +13,10 @@ export_dir="${WORKSPACE:-$HOME/autest_work}"
 sandbox_dir=${export_dir}/sandbox
 mkdir -p ${sandbox_dir}
 
+# We must set ATS_ROOT environment variable which is used in
+# https://github.com/apache/trafficserver/blob/d605c6c82a58f391975e7b17569defba743448b0/tools/cripts/compiler.sh#L27
+export ATS_ROOT=/home/${USERNAME:-jenkins}/ts-autest
+
 autest_args=""
 if [ -d ../cmake ]; then
   # CMake: Enter into the build's test directory.
@@ -20,6 +24,6 @@ if [ -d ../cmake ]; then
   autest_args="--sandbox ${sandbox_dir}"
 else
   # Autoconf.
-  autest_args="--ats-bin /home/${USERNAME:-jenkins}/ts-autest/bin/ --sandbox ${sandbox_dir}"
+  autest_args="--ats-bin ${ATS_ROOT}/bin/ --sandbox ${sandbox_dir}"
 fi
 ./autest.sh ${autest_args} "$@"
