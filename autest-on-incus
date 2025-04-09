@@ -103,7 +103,7 @@ async def ensure_ats_built(instance_name, ats_built_snapshot, jenkins_uid, env):
         incus exec {instance_name} -- cloud-init status --wait
     fi
 
-    env rsync -e fake-ssh -r ./trafficserver {instance_name}:/home/jenkins/
+    env rsync -e fake-ssh -r --exclude build* ./trafficserver {instance_name}:/home/jenkins/
     incus exec {instance_name} -- chown -R jenkins:jenkins /home/jenkins/trafficserver
 
     # Change permissions so that all files are readable
