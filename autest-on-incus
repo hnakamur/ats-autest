@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 import re
 import sys
+import time
 
 async def ensure_incus_project_exist(project_name):
     print(f'ensure_incus_project_exist start, project_name={project_name}')
@@ -210,6 +211,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, 
     while not test_queue.empty():
         test = await test_queue.get()
 
+        start_time = time.time()
         print(f'worker {worker_id} {test} start')
         sys.stdout.flush()
 
@@ -225,6 +227,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, 
         cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --filters {test}{additional_args} 2>&1 > {log_path}'
         process = await asyncio.create_subprocess_shell(cmd, env=env)
         await process.communicate()
+        end_time = time.time()
 
         colored_output_bytes = None
         with open(log_path, 'rb') as f:
@@ -234,7 +237,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir, 
         result = get_test_result(plain_output)
         result_output = result.lower() if result == 'Passed' else result.upper()
 
-        print(f'worker {worker_id} {test} {result_output}')
+        print(f'worker {worker_id} {test} {result_output} {end_time - start_time:.1f}s')
         sys.stdout.flush()
 
         os.rename(log_path, work_dir.joinpath(result.lower(), f'{test}.log'))
