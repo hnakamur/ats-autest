@@ -40,7 +40,7 @@ async def ensure_incus_instance_exist(instance_name, timezone, env):
     # See https://discuss.linuxcontainers.org/t/network-is-unreachable-in-fedora-41-container-on-incus/23351
     cmd = f"""
     if ! incus info {instance_name} 2>/dev/null >/dev/null; then
-        incus launch images:fedora/41/cloud {instance_name} -c user.user-data="#cloud-config
+        incus launch images:fedora/42/cloud {instance_name} -c user.user-data="#cloud-config
     timezone: {timezone}
     "
         incus exec {instance_name} -- cloud-init status --wait
