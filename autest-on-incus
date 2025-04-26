@@ -303,7 +303,11 @@ async def test_worker(worker_id, shard_instance_basename, test_queue,
                 additional_args += ' --verbose'
             else:
                 additional_args += f' --verbose {test_verbose.join(" ")}'
-        cmd = f'incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests -- /home/jenkins/run_autest.sh --filters {test}{additional_args} 2>&1 > {log_path}'
+        cmd = (
+            f'incus exec {instance_name} --user {jenkins_uid} '
+            '--env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests '
+            f'-- /home/jenkins/run_autest.sh --filters {test}{additional_args} 2>&1 > {log_path}'
+        )
         process = await asyncio.create_subprocess_shell(cmd, env=env)
         await process.communicate()
         end_time = time.time()
