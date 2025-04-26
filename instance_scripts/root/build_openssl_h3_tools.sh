@@ -23,7 +23,7 @@
 set -e
 
 # This is a slightly modified version of:
-# https://github.com/apache/trafficserver/blob/49767759ec43c2beb1cc3bddde0d77c341ed1dec/tools/build_openssl_h3_tools.sh
+# https://github.com/apache/trafficserver/blob/456066f170e5d6c76e5a4fc19e2e6b1d636b8d98/tools/build_openssl_h3_tools.sh
 #
 # This present script been modified from the latter in the following ways:
 #
@@ -66,9 +66,9 @@ elif [ -e /etc/debian_version ]; then
     echo "+-------------------------------------------------------------------------+"
     echo "| You probably need to run this, or something like this, for your system: |"
     echo "|                                                                         |"
-    echo "|   sudo apt -y install libev-dev libjemalloc-dev python2-dev libxml2-dev |"
-    echo "|   sudo apt -y install libpython2-dev libc-ares-dev libsystemd-dev       |"
-    echo "|   sudo apt -y install libevent-dev libjansson-dev zlib1g-dev cargo      |"
+    echo "|   sudo apt -y install libev-dev libjemalloc-dev python3-dev libxml2-dev |"
+    echo "|   sudo apt -y install libpython3-dev libc-ares-dev libsystemd-dev       |"
+    echo "|   sudo apt -y install libevent-dev libjansson-dev zlib1g-dev libpsl-dev |"
     echo "|                                                                         |"
     echo "| Rust may be needed too, see https://rustup.rs for the details           |"
     echo "+-------------------------------------------------------------------------+"
