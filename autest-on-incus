@@ -346,13 +346,26 @@ def is_empty_dir(path):
     return not any(path.iterdir())
 
 
-def is_long_test(test):
-    return re.match(r'(remap_acl|http2_flow_control|parent-retry|stale_response|proxy_protocol|quick_server|active_timeout|ja3_fingerprint|dns_down_nameserver|regex_revalidate_miss|zzz_strategies_peer|proxy_serve_stale_dns_fail|config|cache-control|number_of_redirects|ip_allow|dns_ttl|inactive_timeout|strategies_ch2|background_fill|chunked_encoding|x_remap|tls_client_alpn_configuration|per_client_connection_max|traffic_ctl_config_output)', test)
+def is_long_test_tier1(test):
+    return re.match(r'(remap_acl|http2_flow_control)', test)
+
+
+def is_long_test_tier2(test):
+    return re.match(
+        r'(parent-retry|stale_response|proxy_protocol|quick_server|active_timeout|'
+        r'ja3_fingerprint|dns_down_nameserver|regex_revalidate_miss|zzz_strategies_peer|'
+        r'proxy_serve_stale_dns_fail|config|cache-control|number_of_redirects|ip_allow|'
+        r'dns_ttl|inactive_timeout|strategies_ch2|background_fill|chunked_encoding|x_remap|'
+        r'tls_client_alpn_configuration|per_client_connection_max|traffic_ctl_config_output)',
+        test)
 
 
 def sort_tests(tests):
     # Move remap_acl to first since it takes a long time to run
-    return sorted(tests, key=lambda x: (f'00{x}' if is_long_test(x) else x))
+    return sorted(tests,
+                  key=lambda x: (f'01{x}'
+                                 if is_long_test_tier1(x) else f'02{x}'
+                                 if is_long_test_tier2(x) else x))
 
 
 async def run_tests_one_round(work_dir, num_workers, shard_instance_basename,
