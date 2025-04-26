@@ -349,7 +349,8 @@ def is_empty_dir(path):
 
 def sort_tests(tests):
     # Move remap_acl to first since it takes a long time to run
-    return sorted(tests, key=lambda x: (x if x != 'remap_acl' else ''))
+    return sorted(tests,
+                  key=lambda x: (f'00{x}' if x.startswith('remap_acl') else x))
 
 
 async def run_tests_one_round(work_dir, num_workers, shard_instance_basename,
