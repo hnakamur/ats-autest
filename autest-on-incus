@@ -6,12 +6,21 @@ from itertools import chain
 from pathlib import Path
 import os
 import re
+import shutil
 import sys
 import time
 
 
 def script_dir():
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def make_dir_empty(dir_path):
+    for child in dir_path.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
 
 
 async def ensure_incus_project_exist(project_name):
@@ -267,9 +276,9 @@ async def enlarge_ipv4_local_port_range(instance_name, env):
     return process, stderr
 
 
-async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir,
-                      failed_test_queue, jenkins_uid, test_clean_level,
-                      test_verbose, env):
+async def test_worker(worker_id, shard_instance_basename, test_queue,
+                      result_dir, failed_test_queue, jenkins_uid,
+                      test_clean_level, test_verbose, env):
     instance_name = f'{shard_instance_basename}{worker_id}'
 
     await enlarge_ipv4_local_port_range(instance_name, env)
@@ -281,7 +290,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir,
         print(f'worker {worker_id} {test} start')
         sys.stdout.flush()
 
-        log_path = work_dir.joinpath(f'{test}.log')
+        log_path = result_dir.joinpath(f'{test}.log')
         additional_args = ''
         if test_clean_level == 'none':
             additional_args = ' --clean none'
@@ -309,10 +318,10 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir,
         )
         sys.stdout.flush()
 
-        os.rename(log_path, work_dir.joinpath(result.lower(), f'{test}.log'))
+        os.rename(log_path, result_dir.joinpath(result.lower(), f'{test}.log'))
 
         if result == 'Failed' or test_clean_level == 'none':
-            cmd = f'rsync -e {fake_ssh_path()} -r {instance_name}:/home/jenkins/autest_work/sandbox/ {work_dir}/sandbox/'
+            cmd = f'rsync -e {fake_ssh_path()} -r {instance_name}:/home/jenkins/autest_work/sandbox/ {result_dir}/sandbox/'
             process = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.DEVNULL,
@@ -381,6 +390,7 @@ async def test(args):
     max_retry_count = args.max_retry_count
     test_clean_level = args.clean
     test_verbose = args.verbose
+    result_dir = Path(args.result_dir)
 
     build_instance_name = make_prefixed_build_intance_name(args)
     shard_instance_basename = make_prefixed_shard_instance_basename(args)
@@ -400,40 +410,44 @@ async def test(args):
         print('no test to run')
         return
 
-    work_dir = Path('work-{}'.format(datetime.now().strftime('%Y%m%dT%H%M%S')))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    if result_dir.exists():
+        make_dir_empty(result_dir)
+    else:
+        result_dir.mkdir(parents=True, exist_ok=True)
 
     env = env_with_incus_project(project_name)
     await make_shards(build_instance_name, shard_instance_basename,
                       num_workers, env)
 
-    cmd = f'incus exec {build_instance_name} --user {jenkins_uid} -- git -C /home/jenkins/trafficserver rev-parse HEAD > {work_dir}/commit'
+    cmd = f'incus exec {build_instance_name} --user {jenkins_uid} -- git -C /home/jenkins/trafficserver rev-parse HEAD > {result_dir}/commit'
     process = await asyncio.create_subprocess_shell(cmd, env=env)
     await process.communicate()
 
     i = 0
-    result_dir = work_dir
+    current_result_dir = result_dir
     current_targets = sort_tests(tests_to_run)
     failed_tests = []
     while i <= max_retry_count:
         print(
             f'=== running round #{i + 1} of tests, count={len(current_targets)} ==='
         )
-        failed_tests = await run_tests_one_round(result_dir, num_workers,
-                                                 shard_instance_basename,
-                                                 current_targets, jenkins_uid,
-                                                 test_clean_level,
-                                                 test_verbose, env)
+        failed_tests = await run_tests_one_round(
+            current_result_dir, num_workers, shard_instance_basename,
+            current_targets, jenkins_uid, test_clean_level, test_verbose, env)
         print(
             f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}'
         )
         if len(failed_tests) == 0:
             break
         i = i + 1
-        result_dir = work_dir.joinpath(f'retry{i}')
+        current_result_dir = result_dir.joinpath(f'retry{i}')
         current_targets = failed_tests
 
     await ensure_shards_deleted(shard_instance_basename, env)
+
+    if test_clean_level == 'passed':
+        for path in result_dir.glob('**/passed'):
+            shutil.rmtree(path)
 
     if len(failed_tests) > 0:
         print(f'Failed tests after retries: {failed_tests}')
@@ -519,6 +533,10 @@ def add_test_arguments(parser):
                         help='max retry count for round of tests')
     parser.add_argument('--tests', nargs='*', help='tests to run')
     parser.add_argument('--skip', nargs='*', help='tests to skip')
+    parser.add_argument(
+        '--result-dir',
+        default='./_autest_result',
+        help='The root directory in which the tests result will be put')
 
     # copied from autest help
     #  -C, --clean CLEAN     Level of cleaning for after a test is finished. all > exception > failed >
