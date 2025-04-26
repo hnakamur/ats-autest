@@ -347,8 +347,7 @@ def is_empty_dir(path):
 
 
 def is_long_test(test):
-    return test.startswith('remap_acl') or test.startswith(
-        'http2_flow_control')
+    return re.match(r'(remap_acl|http2_flow_control|parent-retry|stale_response|proxy_protocol|quick_server|active_timeout|ja3_fingerprint|dns_down_nameserver|regex_revalidate_miss|zzz_strategies_peer|proxy_serve_stale_dns_fail|config|cache-control|number_of_redirects|ip_allow)', test)
 
 
 def sort_tests(tests):
