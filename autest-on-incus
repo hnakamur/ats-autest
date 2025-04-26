@@ -73,7 +73,7 @@ async def ensure_setup_done_on_instance(instance_name,
         if [ "$(incus info {instance_name} | grep ^Status)" = 'Status: RUNNING' ]; then
             incus start {instance_name}
         fi
-        incus file push instance_scripts/root/*.sh {instance_name}/root/
+        incus file push {instance_scripts_dir()}/root/*.sh {instance_name}/root/
         incus exec {instance_name} -- cloud-init status --wait
         incus exec {instance_name} -- ./setup_base.sh
         incus stop {instance_name}
@@ -126,6 +126,10 @@ def fake_ssh_path():
     return os.path.join(script_dir(), 'fake-ssh')
 
 
+def instance_scripts_dir():
+    return os.path.join(script_dir(), 'instance_scripts')
+
+
 async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
                            jenkins_uid, env):
     print(f'ensure_ats_built start, instance_name={instance_name}')
@@ -141,7 +145,7 @@ async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
     # Change permissions so that all files are readable
     # (default user umask may change and make these unreadable)
     incus exec {instance_name} -- chmod -R o+r /home/jenkins/trafficserver
-    incus file push instance_scripts/jenkins/*.sh {instance_name}/home/jenkins/
+    incus file push {instance_scripts_dir()}/jenkins/*.sh {instance_name}/home/jenkins/
 
     incus exec {instance_name} --user {jenkins_uid} --env HOME=/home/jenkins --cwd /home/jenkins/trafficserver -- /home/jenkins/build_ats.sh
 
