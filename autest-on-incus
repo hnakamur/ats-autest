@@ -103,6 +103,7 @@ async def ensure_shards_deleted(shard_instance_basename, env):
     cmd = f"""
     incus list '^{shard_instance_basename}[0-9]+$' -cn -f csv | xargs -r incus delete -f
     """
+    start_time = time.time()
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
     await process.communicate()
@@ -110,6 +111,8 @@ async def ensure_shards_deleted(shard_instance_basename, env):
         raise RuntimeError(
             f'ensure_shards_deleted failed, shard_basname={shard_instance_basename}'
         )
+    elapsed = time.time() - start_time
+    logging.info(f'deleted shards, elapsed: {elapsed:.1f} (s)')
 
 
 async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot,
@@ -405,6 +408,14 @@ async def run_tests_one_round(work_dir, num_workers, shard_instance_basename,
     return sort_tests(failed_tests)
 
 
+def clean_passed(result_dir):
+    start_time = time.time()
+    for path in result_dir.glob('**/passed'):
+        shutil.rmtree(path)
+    elapsed = time.time() - start_time
+    logging.info(f'cleaned passed directories, elapsed: {elapsed:.1f} (s)')
+
+
 async def test(args):
     project_name = args.project
     ats_src_dir = os.path.join(script_dir(), args.ats_src)
@@ -456,14 +467,16 @@ async def test(args):
     current_targets = sort_tests(tests_to_run)
     failed_tests = []
     while i <= max_retry_count:
+        round_start_time = time.time()
         logging.info(
             f'=== running round #{i + 1} of tests, count={len(current_targets)} ==='
         )
         failed_tests = await run_tests_one_round(
             current_result_dir, num_workers, shard_instance_basename,
             current_targets, jenkins_uid, test_clean_level, test_verbose, env)
+        round_elapsed = time.time() - round_start_time
         logging.info(
-            f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}'
+            f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}, elapsed: {round_elapsed:.1f} (s)'
         )
         if len(failed_tests) == 0:
             break
@@ -474,13 +487,10 @@ async def test(args):
     await ensure_shards_deleted(shard_instance_basename, env)
 
     if test_clean_level == 'passed':
-        for path in result_dir.glob('**/passed'):
-            shutil.rmtree(path)
+        clean_passed(result_dir)
 
-    end_time = time.time()
-    logging.info(
-        f'=== finished running tests. elapsed: {end_time - start_time:.1f} (s) ==='
-    )
+    elapsed = time.time() - start_time
+    logging.info(f'=== finished running tests. elapsed: {elapsed:.1f} (s) ===')
 
     if len(failed_tests) > 0:
         logging.error(f'Failed tests after retries: {failed_tests}')
