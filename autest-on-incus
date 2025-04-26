@@ -25,12 +25,8 @@ def make_dir_empty(dir_path):
 
 
 async def ensure_incus_project_exist(project_name):
-    logging.debug(
-        f'ensure_incus_project_exist start, project_name={project_name}')
     if project_name == None:
         project_name = os.environ.get('INCUS_PROJECT')
-    logging.debug(
-        f'ensure_incus_project_exist start, project_name#2={project_name}')
     if project_name == None or project_name == 'default':
         return
 
@@ -294,7 +290,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue,
         test = await test_queue.get()
 
         start_time = time.time()
-        logging.debug(f'worker {worker_id} {test} start')
+        logging.info(f'worker {worker_id} {test} start')
         sys.stdout.flush()
 
         log_path = result_dir.joinpath(f'{test}.log')
