@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from datetime import datetime
 from itertools import chain
+import logging
 from pathlib import Path
 import os
 import re
@@ -24,10 +25,12 @@ def make_dir_empty(dir_path):
 
 
 async def ensure_incus_project_exist(project_name):
-    print(f'ensure_incus_project_exist start, project_name={project_name}')
+    logging.debug(
+        f'ensure_incus_project_exist start, project_name={project_name}')
     if project_name == None:
         project_name = os.environ.get('INCUS_PROJECT')
-    print(f'ensure_incus_project_exist start, project_name#2={project_name}')
+    logging.debug(
+        f'ensure_incus_project_exist start, project_name#2={project_name}')
     if project_name == None or project_name == 'default':
         return
 
@@ -52,7 +55,8 @@ def env_with_incus_project(project_name):
 
 
 async def ensure_incus_instance_exist(instance_name, timezone, env):
-    print(f'ensure_incus_instance_exist start, instance_name={instance_name}')
+    logging.info(
+        f'ensure_incus_instance_exist start, instance_name={instance_name}')
     # Note we need a workaround to start systemd-networkd service manually after launch.
     # See https://discuss.linuxcontainers.org/t/network-is-unreachable-in-fedora-41-container-on-incus/23351
     cmd = f"""
@@ -75,7 +79,7 @@ async def ensure_incus_instance_exist(instance_name, timezone, env):
 
 async def ensure_setup_done_on_instance(instance_name,
                                         base_setup_snapshot_name, env):
-    print(
+    logging.info(
         f'ensure_setup_done_on_instance start, instance_name={instance_name}')
     cmd = f"""
     if ! incus snapshot show {instance_name} {base_setup_snapshot_name} 2>/dev/null >/dev/null; then
@@ -114,7 +118,7 @@ async def ensure_shards_deleted(shard_instance_basename, env):
 
 async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot,
                                             ats_built_snapshot, env):
-    print(
+    logging.info(
         f'ensure_restore_to_base_setup_done start, instance_name={instance_name}'
     )
     cmd = f"""
@@ -141,7 +145,7 @@ def instance_scripts_dir():
 
 async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
                            jenkins_uid, env):
-    print(f'ensure_ats_built start, instance_name={instance_name}')
+    logging.info(f'ensure_ats_built start, instance_name={instance_name}')
     cmd = f"""
     if [ "$(incus info {instance_name} | grep ^Status)" != 'Status: RUNNING' ]; then
         incus start {instance_name}
@@ -287,7 +291,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue,
         test = await test_queue.get()
 
         start_time = time.time()
-        print(f'worker {worker_id} {test} start')
+        logging.debug(f'worker {worker_id} {test} start')
         sys.stdout.flush()
 
         log_path = result_dir.joinpath(f'{test}.log')
@@ -313,8 +317,8 @@ async def test_worker(worker_id, shard_instance_basename, test_queue,
         result_output = result.lower() if result == 'Passed' else result.upper(
         )
 
-        print(
-            f'worker {worker_id} {test} {result_output} {end_time - start_time:.1f}s'
+        logging.info(
+            f'worker {worker_id} {test} {result_output} elapsed: {end_time - start_time:.1f} (s)'
         )
         sys.stdout.flush()
 
@@ -407,8 +411,11 @@ async def test(args):
 
     num_workers = min(num_workers, len(tests_to_run))
     if num_workers == 0:
-        print('no test to run')
+        logging.warning('no test to run')
         return
+
+    start_time = time.time()
+    logging.info(f'=== start running tests ===')
 
     if result_dir.exists():
         make_dir_empty(result_dir)
@@ -428,13 +435,13 @@ async def test(args):
     current_targets = sort_tests(tests_to_run)
     failed_tests = []
     while i <= max_retry_count:
-        print(
+        logging.info(
             f'=== running round #{i + 1} of tests, count={len(current_targets)} ==='
         )
         failed_tests = await run_tests_one_round(
             current_result_dir, num_workers, shard_instance_basename,
             current_targets, jenkins_uid, test_clean_level, test_verbose, env)
-        print(
+        logging.info(
             f'finished running round #{i + 1} of tests, failed_test count={len(failed_tests)}'
         )
         if len(failed_tests) == 0:
@@ -449,8 +456,13 @@ async def test(args):
         for path in result_dir.glob('**/passed'):
             shutil.rmtree(path)
 
+    end_time = time.time()
+    logging.info(
+        f'=== finished running tests. elapsed: {end_time - start_time:.1f} (s) ==='
+    )
+
     if len(failed_tests) > 0:
-        print(f'Failed tests after retries: {failed_tests}')
+        logging.error(f'Failed tests after retries: {failed_tests}')
         sys.exit(1)
 
 
@@ -458,7 +470,7 @@ async def subcommand_build(args):
     try:
         await build(args)
     except RuntimeError as e:
-        print(f'{e}', file=sys.stderr)
+        logging.error(f'{e}', file=sys.stderr)
         sys.exit(1)
 
 
@@ -466,7 +478,7 @@ async def subcommand_test(args):
     try:
         await test(args)
     except RuntimeError as e:
-        print(f'{e}', file=sys.stderr)
+        logging.error(f'{e}', file=sys.stderr)
         sys.exit(1)
 
 
@@ -475,7 +487,7 @@ async def subcommand_build_and_test(args):
         await build(args)
         await test(args)
     except RuntimeError as e:
-        print(f'{e}', file=sys.stderr)
+        logging.error(f'{e}', file=sys.stderr)
         sys.exit(1)
 
 
@@ -561,6 +573,11 @@ def add_test_arguments(parser):
 
 
 async def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S')
+
     parser = argparse.ArgumentParser(
         prog='autest_on_incus',
         description='Run autest in shards on Incus containers')
