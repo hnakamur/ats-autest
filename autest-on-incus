@@ -346,10 +346,14 @@ def is_empty_dir(path):
     return not any(path.iterdir())
 
 
+def is_long_test(test):
+    return test.startswith('remap_acl') or test.startswith(
+        'http2_flow_control')
+
+
 def sort_tests(tests):
     # Move remap_acl to first since it takes a long time to run
-    return sorted(tests,
-                  key=lambda x: (f'00{x}' if x.startswith('remap_acl') else x))
+    return sorted(tests, key=lambda x: (f'00{x}' if is_long_test(x) else x))
 
 
 async def run_tests_one_round(work_dir, num_workers, shard_instance_basename,
