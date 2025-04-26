@@ -10,6 +10,10 @@ import sys
 import time
 
 
+def script_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
 async def ensure_incus_project_exist(project_name):
     print(f'ensure_incus_project_exist start, project_name={project_name}')
     if project_name == None:
@@ -118,8 +122,8 @@ async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot,
         )
 
 
-async def ensure_ats_built(instance_name, ats_built_snapshot, jenkins_uid,
-                           env):
+async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
+                           jenkins_uid, env):
     print(f'ensure_ats_built start, instance_name={instance_name}')
     cmd = f"""
     if [ "$(incus info {instance_name} | grep ^Status)" != 'Status: RUNNING' ]; then
@@ -127,7 +131,7 @@ async def ensure_ats_built(instance_name, ats_built_snapshot, jenkins_uid,
         incus exec {instance_name} -- cloud-init status --wait
     fi
 
-    env rsync -e fake-ssh -r --exclude build* ./trafficserver {instance_name}:/home/jenkins/
+    env rsync -e fake-ssh -r --exclude build* {ats_src_dir} {instance_name}:/home/jenkins/
     incus exec {instance_name} -- chown -R jenkins:jenkins /home/jenkins/trafficserver
 
     # Change permissions so that all files are readable
@@ -161,6 +165,7 @@ def make_prefixed_shard_instance_basename(args):
 
 async def build(args):
     project_name = args.project
+    ats_src_dir = os.path.join(script_dir(), args.ats_src)
     timezone = args.timezone
     base_setup_snapshot = args.snapshot_base
     ats_built_snapshot = args.snapshot_ats
@@ -182,8 +187,8 @@ async def build(args):
     await ensure_restore_to_base_setup_done(build_instance_name,
                                             base_setup_snapshot,
                                             ats_built_snapshot, env)
-    await ensure_ats_built(build_instance_name, ats_built_snapshot,
-                           jenkins_uid, env)
+    await ensure_ats_built(build_instance_name, ats_src_dir,
+                           ats_built_snapshot, jenkins_uid, env)
 
 
 async def make_shard(build_instance, shard_instance, env):
@@ -478,6 +483,12 @@ def add_build_arguments(parser):
     default_snapshot_base = 'base_setup_done'
     default_snapshot_ats = 'ats_built'
 
+    parser.add_argument(
+        '--ats-src',
+        default='trafficserver',
+        help=
+        'trafficserver source directory (relative to autest-on-incus directory or absolute path, default: trafficserver)'
+    )
     parser.add_argument('--timezone', help='timezone for build instance')
     parser.add_argument('--snapshot-base',
                         default=default_snapshot_base,
