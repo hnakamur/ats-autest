@@ -122,6 +122,10 @@ async def ensure_restore_to_base_setup_done(instance_name, base_setup_snapshot,
         )
 
 
+def fake_ssh_path():
+    return os.path.join(script_dir(), 'fake-ssh')
+
+
 async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
                            jenkins_uid, env):
     print(f'ensure_ats_built start, instance_name={instance_name}')
@@ -131,7 +135,7 @@ async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
         incus exec {instance_name} -- cloud-init status --wait
     fi
 
-    env rsync -e fake-ssh -r --exclude build* {ats_src_dir} {instance_name}:/home/jenkins/
+    env rsync -e {fake_ssh_path()} -r --exclude build* {ats_src_dir} {instance_name}:/home/jenkins/
     incus exec {instance_name} -- chown -R jenkins:jenkins /home/jenkins/trafficserver
 
     # Change permissions so that all files are readable
@@ -304,7 +308,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue, work_dir,
         os.rename(log_path, work_dir.joinpath(result.lower(), f'{test}.log'))
 
         if result == 'Failed' or test_clean_level == 'none':
-            cmd = f'rsync -e ./fake-ssh -r {instance_name}:/home/jenkins/autest_work/sandbox/ {work_dir}/sandbox/'
+            cmd = f'rsync -e {fake_ssh_path()} -r {instance_name}:/home/jenkins/autest_work/sandbox/ {work_dir}/sandbox/'
             process = await asyncio.create_subprocess_shell(
                 cmd,
                 stdout=asyncio.subprocess.DEVNULL,
