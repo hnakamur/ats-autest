@@ -415,8 +415,7 @@ async def test(args):
             item for item in tests_to_run if item not in skip_tests
         ]
 
-    num_workers = min(num_workers, len(tests_to_run))
-    if num_workers == 0:
+    if len(tests_to_run) == 0:
         logging.warning('no test to run')
         return
 
