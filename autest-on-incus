@@ -152,7 +152,7 @@ async def ensure_ats_built(instance_name, ats_src_dir, ats_built_snapshot,
         incus exec {instance_name} -- cloud-init status --wait
     fi
 
-    env rsync -e {fake_ssh_path()} -r --exclude build* {ats_src_dir} {instance_name}:/home/jenkins/
+    rsync -e {fake_ssh_path()} -r --exclude build* {ats_src_dir} {instance_name}:/home/jenkins/
     incus exec {instance_name} -- chown -R jenkins:jenkins /home/jenkins/trafficserver
 
     # Change permissions so that all files are readable
@@ -212,7 +212,8 @@ async def build(args):
                            ats_built_snapshot, jenkins_uid, env)
 
 
-async def make_shard(build_instance, shard_instance, env):
+async def make_shard(build_instance, shard_instance, copy_tests, ats_src_dir,
+                     env):
     cmd = f"""
     set -e
     if incus info {shard_instance} 2>/dev/null >/dev/null; then
@@ -222,6 +223,8 @@ async def make_shard(build_instance, shard_instance, env):
     incus start {shard_instance}
     incus exec {shard_instance} -- cloud-init status --wait
     """
+    if copy_tests:
+        cmd += f"\nrsync -e {fake_ssh_path()} -r --exclude build* {ats_src_dir}/tests/ {shard_instance}:/home/jenkins/trafficserver/tests/"
     process = await asyncio.create_subprocess_shell(
         cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
     await process.communicate()
@@ -232,10 +235,10 @@ async def make_shard(build_instance, shard_instance, env):
 
 
 async def make_shards(build_instance, shard_instance_basename, shard_count,
-                      env):
+                      copy_tests, ats_src_dir, env):
     await asyncio.gather(*[
-        make_shard(build_instance, f'{shard_instance_basename}{i}', env)
-        for i in range(shard_count)
+        make_shard(build_instance, f'{shard_instance_basename}{i}', copy_tests,
+                   ats_src_dir, env) for i in range(shard_count)
     ])
 
 
@@ -392,6 +395,7 @@ async def run_tests_one_round(work_dir, num_workers, shard_instance_basename,
 
 async def test(args):
     project_name = args.project
+    ats_src_dir = os.path.join(script_dir(), args.ats_src)
     num_workers = args.shards
     jenkins_uid = args.jenkins_uid
     skip_tests = args.skip
@@ -400,6 +404,7 @@ async def test(args):
     test_clean_level = args.clean
     test_verbose = args.verbose
     result_dir = Path(args.result_dir)
+    copy_tests = args.copy_tests
 
     build_instance_name = make_prefixed_build_intance_name(args)
     shard_instance_basename = make_prefixed_shard_instance_basename(args)
@@ -429,7 +434,7 @@ async def test(args):
 
     env = env_with_incus_project(project_name)
     await make_shards(build_instance_name, shard_instance_basename,
-                      num_workers, env)
+                      num_workers, copy_tests, ats_src_dir, env)
 
     cmd = f'incus exec {build_instance_name} --user {jenkins_uid} -- git -C /home/jenkins/trafficserver rev-parse HEAD > {result_dir}/commit'
     process = await asyncio.create_subprocess_shell(cmd, env=env)
@@ -513,6 +518,12 @@ def add_common_arguments(parser):
     parser.add_argument('--shard-instance-basename',
                         default='shard',
                         help='shard instance basename')
+    parser.add_argument(
+        '--ats-src',
+        default='trafficserver',
+        help=
+        'trafficserver source directory (relative to autest-on-incus directory or absolute path, default: trafficserver)'
+    )
     parser.add_argument('--jenkins-uid',
                         default=default_jenkins_uid,
                         help='uid for jenkins user')
@@ -522,12 +533,6 @@ def add_build_arguments(parser):
     default_snapshot_base = 'base_setup_done'
     default_snapshot_ats = 'ats_built'
 
-    parser.add_argument(
-        '--ats-src',
-        default='trafficserver',
-        help=
-        'trafficserver source directory (relative to autest-on-incus directory or absolute path, default: trafficserver)'
-    )
     parser.add_argument('--timezone', help='timezone for build instance')
     parser.add_argument('--snapshot-base',
                         default=default_snapshot_base,
@@ -548,6 +553,9 @@ def add_test_arguments(parser):
                         default=3,
                         type=int,
                         help='max retry count for round of tests')
+    parser.add_argument('--copy-tests',
+                        action='store_true',
+                        help='skips building but copys tests sources to run')
     parser.add_argument('--tests', nargs='*', help='tests to run')
     parser.add_argument('--skip', nargs='*', help='tests to skip')
     parser.add_argument(
