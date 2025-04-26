@@ -309,7 +309,7 @@ async def test_worker(worker_id, shard_instance_basename, test_queue,
         cmd = (
             f'incus exec {instance_name} --user {jenkins_uid} '
             '--env HOME=/home/jenkins --cwd /home/jenkins/trafficserver/tests '
-            f'-- /home/jenkins/run_autest.sh --filters {test}{additional_args} 2>&1 > {log_path}'
+            f"-- /home/jenkins/run_autest.sh --filters '{test}'{additional_args} 2>&1 > {log_path}"
         )
         process = await asyncio.create_subprocess_shell(cmd, env=env)
         await process.communicate()
@@ -576,8 +576,6 @@ def add_test_arguments(parser):
     # copied from autest help
     #  --verbose, -v [CATEGORY ...]
     #                    Display all verbose messages or only messages of provided categories
-    #  --debug [CATEGORY ...]
-    #                    Display all debug messages or only messages of provided categories
     parser.add_argument(
         '--verbose',
         nargs='*',
