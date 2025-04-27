@@ -93,7 +93,7 @@ async def ensure_shards_deleted(shard_instance_basename, env):
     # note no need to re.escape(shard_instance_basename) since instance name
     # can only contain alphanumeric and hyphen characters.
     cmd = f"""
-    incus list '^{shard_instance_basename}[0-9]+$' -cn -f csv | xargs -r incus delete -f
+    incus list '^{shard_instance_basename}[0-9]+$' -cn -f csv | xargs -r incus stop
     """
     start_time = time.time()
     process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, env=env)
